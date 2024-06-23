@@ -28,7 +28,12 @@ func readConfig() {
 	if err != nil {
 		log.Fatal("Error opening config file:", err)
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			log.Fatal("Error closing config file:", err)
+		}
+	}(file)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -85,13 +90,23 @@ func updateDatabase(filePath string) {
 
 func main() {
 	initDB()
-	defer db.Close()
+	defer func(db *sql.DB) {
+		err := db.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(db)
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer watcher.Close()
+	defer func(watcher *fsnotify.Watcher) {
+		err := watcher.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(watcher)
 
 	go watchFiles(watcher)
 
