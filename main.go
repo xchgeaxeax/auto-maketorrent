@@ -20,6 +20,7 @@ import (
 var db *sql.DB
 var outputDir string
 var watchDir string
+var defaultTracker string
 var semaphore chan struct{}
 var wg sync.WaitGroup
 var dbMutex sync.Mutex
@@ -52,6 +53,8 @@ func readConfig() {
 				outputDir = value
 			case "watchDir":
 				watchDir = value
+			case "defaultTracker":
+				defaultTracker = value
 			}
 		}
 	}
@@ -220,6 +223,7 @@ func createTorrent(filePath string) {
 	mi := &metainfo.MetaInfo{
 		CreatedBy:    "xchgeaxeax-auto-torrent",
 		CreationDate: time.Now().Unix(),
+		Announce:     defaultTracker, // 设置默认的 tracker
 	}
 
 	// 创建 Info 结构
