@@ -11,15 +11,18 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 var db *sql.DB
 var outputDir string
 var watchDir string
-
-//var wg sync.WaitGroup
+var semaphore chan struct{}
+var wg sync.WaitGroup
+var dbMutex sync.Mutex
 
 func init() {
 	readConfig()
@@ -83,6 +86,9 @@ func initDB() {
 }
 
 func updateDatabase(filePath string) {
+	dbMutex.Lock()         // 获取互斥锁
+	defer dbMutex.Unlock() // 函数返回时释放互斥锁
+
 	// 更新数据库，记录已处理的文件
 	_, err := db.Exec("INSERT INTO processed_files (path, processed_time) VALUES (?, ?)", filePath, time.Now())
 	if err != nil {
@@ -98,6 +104,12 @@ func main() {
 			log.Fatal(err)
 		}
 	}(db)
+
+	maxThreads := runtime.NumCPU() / 2
+	if maxThreads < 1 {
+		maxThreads = 1
+	}
+	semaphore = make(chan struct{}, maxThreads)
 
 	// 初始扫描监视文件夹中的所有子文件夹
 	err := filepath.Walk(watchDir, func(path string, info os.FileInfo, err error) error {
@@ -135,6 +147,11 @@ func main() {
 	log.Println("Watching directory:", watchDir)
 	log.Println("Outputting torrents to:", outputDir)
 
+	go func() {
+		wg.Wait()
+		log.Println("All torrent creation tasks completed.")
+	}()
+
 	select {}
 }
 
@@ -171,12 +188,23 @@ func watchFolders(watcher *fsnotify.Watcher) {
 
 func processNewFolder(folderPath string) {
 	if isNewFolder(folderPath) {
-		createTorrent(folderPath)
-		updateDatabase(folderPath)
+		wg.Add(1)
+		semaphore <- struct{}{}
+		go func() {
+			defer func() {
+				<-semaphore
+				wg.Done()
+			}()
+			createTorrent(folderPath)
+			updateDatabase(folderPath)
+		}()
 	}
 }
 
 func isNewFolder(folderPath string) bool {
+	dbMutex.Lock()         // 获取互斥锁
+	defer dbMutex.Unlock() // 函数返回时释放互斥锁
+
 	// 检查数据库，判断是否为新文件夹
 	var count int
 	err := db.QueryRow("SELECT COUNT(*) FROM processed_files WHERE path = ?", folderPath).Scan(&count)
@@ -187,23 +215,6 @@ func isNewFolder(folderPath string) bool {
 	return count == 0
 }
 
-//func processNewFile(filePath string) {
-//	if isNewFile(filePath) {
-//		createTorrent(filePath)
-//		updateDatabase(filePath)
-//	}
-//}
-
-//	func isNewFile(filePath string) bool {
-//		// 检查数据库，判断是否为新文件
-//		var count int
-//		err := db.QueryRow("SELECT COUNT(*) FROM processed_files WHERE path = ?", filePath).Scan(&count)
-//		if err != nil {
-//			log.Println("Database query error:", err)
-//			return false
-//		}
-//		return count == 0
-//	}
 func createTorrent(filePath string) {
 	// 创建 MetaInfo 结构
 	mi := &metainfo.MetaInfo{
