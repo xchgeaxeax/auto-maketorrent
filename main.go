@@ -207,13 +207,13 @@ func isNewFolder(folderPath string) bool {
 func createTorrent(filePath string) {
 	// 创建 MetaInfo 结构
 	mi := &metainfo.MetaInfo{
-		CreatedBy:    "YourTorrentCreator",
+		CreatedBy:    "xchgeaxeax-auto-torrent",
 		CreationDate: time.Now().Unix(),
 	}
 
 	// 创建 Info 结构
 	info := metainfo.Info{
-		PieceLength: 256 * 1024, // 256 KB per piece, 可以根据需要调整
+		PieceLength: 1024 * 1024, // 1 MB per piece
 	}
 
 	// 获取文件信息
